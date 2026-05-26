@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>North East Nigeria Schools Map</title>
+    <title>BAY States Nigeria Schools Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
@@ -52,7 +52,7 @@
 <body>
 
     <div class="info-box">
-        <h2 style="margin:0">North East Schools Dashboard</h2>
+        <h2 style="margin:0">BAY States Schools Dashboard</h2>
         <div id="stats">Loading data...</div>
     </div>
     <div id="map"></div>
@@ -62,7 +62,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <script>
-        const map = L.map('map').setView([11.5, 13.0], 7);
+        const map = L.map('map', {
+            center: [11.5, 13.0],
+            zoom: 7,
+            minZoom: 6,
+            maxBounds: [[7.0, 10.0], [14.0, 16.0]]
+        });
 
         L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
