@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>North East Nigeria Schools Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <style>
+        #map { height: 100vh; width: 100%; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* Legend Styles */
+        .legend {
+            background: white;
+            padding: 15px;
+            line-height: 24px;
+            color: #333;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .legend h4 {
+            margin: 0 0 10px;
+            font-size: 16px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        .legend i {
+            width: 12px;
+            height: 12px;
+            float: left;
+            margin-right: 10px;
+            margin-top: 6px;
+            border-radius: 50%;
+            border: 1px solid #555;
+        }
+
+        .info-box {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            z-index: 1000;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="info-box">
+        <h2 style="margin:0">North East Schools Dashboard</h2>
+        <div id="stats">Loading data...</div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <script>
+        const map = L.map('map').setView([11.5, 13.0], 7);
+
+        L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Color mapping for school levels
+        function getColor(level) {
+            level = level ? level.toLowerCase() : '';
+            if (level.includes('primary')) return '#3498db'; // Blue
+            if (level.includes('secondary')) return '#2ecc71'; // Green
+            if (level.includes('tertiary')) return '#e67e22'; // Orange
+            if (level.includes('nursery') || level.includes('kindergarten')) return '#9b59b6'; // Purple
+            return '#95a5a6'; // Gray
+        }
+
+        const markers = L.markerClusterGroup();
+
+        // Add Legend
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'legend');
+            const levels = ['Primary', 'Secondary', 'Tertiary', 'Nursery', 'Other'];
+            const colors = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#95a5a6'];
+
+            div.innerHTML = '<h4>School Level</h4>';
+            for (let i = 0; i < levels.length; i++) {
+                div.innerHTML +=
+                    '<i style="background:' + colors[i] + '"></i> ' +
+                    levels[i] + '<br>';
+            }
+            return div;
+        };
+        legend.addTo(map);
+
+        // Load CSV (Path adjusted to ../ because map is in maps/ folder)
+        Papa.parse('../data/clean/north_east_schools_complete.csv', {
+            download: true,
+            header: true,
+            complete: function(results) {
+                const data = results.data;
+                let count = 0;
+
+                data.forEach(school => {
+                    if (school.latitude && school.longitude) {
+                        const lat = parseFloat(school.latitude);
+                        const lng = parseFloat(school.longitude);
+                        
+                        // Use circle markers for better performance and color coding
+                        const marker = L.circleMarker([lat, lng], {
+                            radius: 6,
+                            fillColor: getColor(school.level),
+                            color: "#fff",
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+                        
+                        const popupContent = `
+                            <div style="font-family: sans-serif; min-width: 200px;">
+                                <h3 style="margin:0 0 5px; color:#2c3e50;">${school.school_name}</h3>
+                                <hr style="border:0; border-top:1px solid #eee;">
+                                <b>Level:</b> ${school.level}<br>
+                                <b>Ownership:</b> ${school.ownership}<br>
+                                <b>Student Count:</b> ${school.student_count || 'Data not available'}<br>
+                                <b>State:</b> ${school.state}<br>
+                                <p style="margin:10px 0 0; font-size:12px; color:#7f8c8d;">${school.address}</p>
+                            </div>
+                        `;
+                        
+                        marker.bindPopup(popupContent);
+                        markers.addLayer(marker);
+                        count++;
+                    }
+                });
+
+                map.addLayer(markers);
+                document.getElementById('stats').innerHTML = `<strong>Total Schools:</strong> ${count.toLocaleString()}`;
+            }
+        });
+    </script>
+</body>
+</html>
