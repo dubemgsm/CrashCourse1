@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <style>
-        #map { height: 100vh; width: 100%; background-color: #f4f4f4; }
+        #map { height: 100vh; width: 100%; }
         body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
         /* Legend Styles */
@@ -69,21 +69,9 @@
             maxBounds: [[7.0, 10.0], [14.0, 16.0]]
         });
 
-        // TILE LAYER REMOVED to show only BAY states data
-
-        // Load Boundaries first for context
-        fetch('../data/clean/north_east_density.geojson')
-            .then(res => res.json())
-            .then(data => {
-                L.geoJson(data, {
-                    style: {
-                        color: "#999",
-                        weight: 1,
-                        fillColor: "#fff",
-                        fillOpacity: 0.6
-                    }
-                }).addTo(map);
-            });
+        L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
 
         // Color mapping for school levels
         function getColor(level) {
@@ -114,7 +102,7 @@
         };
         legend.addTo(map);
 
-        // Load CSV
+        // Load CSV (Path adjusted to ../ because map is in maps/ folder)
         Papa.parse('../data/clean/north_east_schools_complete.csv', {
             download: true,
             header: true,
@@ -127,6 +115,7 @@
                         const lat = parseFloat(school.latitude);
                         const lng = parseFloat(school.longitude);
                         
+                        // Use circle markers for better performance and color coding
                         const marker = L.circleMarker([lat, lng], {
                             radius: 6,
                             fillColor: getColor(school.level),

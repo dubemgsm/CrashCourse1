@@ -6,7 +6,7 @@
     <title>BAY States Nigeria Population Density Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        #map { height: 100vh; width: 100%; background-color: #f4f4f4; }
+        #map { height: 100vh; width: 100%; }
         body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
         
         .info {
@@ -53,7 +53,9 @@
             maxBounds: [[7.0, 10.0], [14.0, 16.0]]
         });
 
-        // TILE LAYER REMOVED to show only BAY states data
+        L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
 
         // Control to show info on hover
         const info = L.control();
@@ -67,7 +69,7 @@
         info.update = function (props) {
             this._div.innerHTML = '<h4>Population Density (People/sq km)</h4>' +  (props ?
                 '<b>' + props.NAME_2 + ' (' + props.NAME_1 + ')</b><br />' + 
-                'Density: ' + Math.round(props.population_density) + ' people / sq km<br />' +
+                'Density: ' + Math.round(props.population_density) + ' people / mi<sup>2</sup><br />' +
                 'Total Pop: ' + props.Total_Population_2022_Projection.toLocaleString() + '<br />' +
                 'Area: ' + Math.round(props.area_sqkm).toLocaleString() + ' sq km<br />' +
                 'School-Age Pop: ' + Math.round(props.Estimated_School_Age_Pop_5_17).toLocaleString() + '<br />' +
