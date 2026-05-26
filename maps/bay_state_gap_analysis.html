@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAY States - Education Gap Analysis</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 100vh; width: 100%; background: #f8f9fa; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            width: 320px;
+        }
+
+        .bivariate-legend {
+            margin-top: 20px;
+            padding: 10px;
+            background: #fdfdfd;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        .matrix {
+            display: grid;
+            grid-template-columns: repeat(3, 40px);
+            grid-template-rows: repeat(3, 40px);
+            gap: 2px;
+            transform: rotate(-45deg);
+            margin: 40px auto;
+            width: 124px;
+        }
+
+        .matrix div {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #fff;
+        }
+
+        .matrix-label {
+            position: absolute;
+            font-size: 10px;
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .gap-indicator {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .deficit { background: #be64ac; color: white; }
+        .surplus { background: #5ac8c8; color: white; }
+        
+        select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .info-box {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="control-panel">
+        <h2 style="margin:0 0 5px; font-size: 18px;">Supply vs. Demand Analysis</h2>
+        <p style="margin:0 0 15px; font-size: 12px; color: #666;">BAY States (Adamawa, Borno, Yobe)</p>
+        
+        <label style="font-size: 13px; font-weight: bold;">Filter by State:</label>
+        <select id="stateFilter">
+            <option value="all">All BAY States</option>
+            <option value="Adamawa">Adamawa</option>
+            <option value="Borno">Borno</option>
+            <option value="Yobe">Yobe</option>
+        </select>
+
+        <div class="bivariate-legend">
+            <div style="text-align:center; font-size: 12px; font-weight: bold; margin-bottom: -10px;">BIVARIATE KEY</div>
+            <div style="position: relative; height: 160px;">
+                <div class="matrix">
+                    <div style="background: #3b4994;" title="High Demand, High Supply"></div>
+                    <div style="background: #5698b9;" title="High Demand, Mid Supply"></div>
+                    <div style="background: #5ac8c8;" title="High Demand, Low Supply (DEFICIT)"></div>
+                    
+                    <div style="background: #8c62aa;" title="Mid Demand, High Supply"></div>
+                    <div style="background: #a5add3;" title="Mid Demand, Mid Supply"></div>
+                    <div style="background: #ace4e4;" title="Mid Demand, Low Supply"></div>
+                    
+                    <div style="background: #be64ac;" title="Low Demand, High Supply (SURPLUS)"></div>
+                    <div style="background: #dfb0d6;" title="Low Demand, Mid Supply"></div>
+                    <div style="background: #e8e8e8;" title="Low Demand, Low Supply"></div>
+                </div>
+                <div class="matrix-label" style="bottom: 10px; left: 40px; transform: rotate(45deg);">Supply &rarr;</div>
+                <div class="matrix-label" style="top: 40px; left: -10px; transform: rotate(-45deg);">Demand &rarr;</div>
+            </div>
+        </div>
+
+        <div id="gapStats" class="gap-indicator deficit">
+            Analyzing Gap...
+        </div>
+        
+        <div id="details" class="info-box" style="margin-top: 15px; display:none;">
+            <hr>
+            <div id="lgaName" style="font-weight:bold; font-size:15px;"></div>
+            <div id="lgaData"></div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', {
+            center: [11.5, 13.2],
+            zoom: 7,
+            minZoom: 6
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(map);
+
+        const colorMap = {
+            '11': '#e8e8e8', '12': '#dfb0d6', '13': '#be64ac',
+            '21': '#ace4e4', '22': '#a5add3', '23': '#8c62aa',
+            '31': '#5ac8c8', '32': '#5698b9', '33': '#3b4994'
+        };
+
+        function getBivariateColor(d, s) {
+            // Logic matches the matrix display: 
+            // Demand classes 1,2,3 and Supply classes 1,2,3
+            const id = d.toString() + s.toString();
+            return colorMap[id] || '#eee';
+        }
+
+        let geojsonLayer;
+        let fullData;
+
+        function updateMap(stateFilter) {
+            if (geojsonLayer) map.removeLayer(geojsonLayer);
+
+            const filteredData = {
+                type: "FeatureCollection",
+                features: fullData.features.filter(f => 
+                    stateFilter === 'all' || f.properties.NAME_1 === stateFilter
+                )
+            };
+
+            geojsonLayer = L.geoJson(filteredData, {
+                style: function(feature) {
+                    return {
+                        fillColor: getBivariateColor(feature.properties.demand_class, feature.properties.supply_class),
+                        weight: 1.5,
+                        opacity: 1,
+                        color: 'white',
+                        fillOpacity: 0.85
+                    };
+                },
+                onEachFeature: function(feature, layer) {
+                    layer.on({
+                        mouseover: (e) => {
+                            const p = feature.properties;
+                            document.getElementById('details').style.display = 'block';
+                            document.getElementById('lgaName').innerText = p.NAME_2;
+                            document.getElementById('lgaData').innerHTML = `
+                                State: ${p.NAME_1}<br>
+                                Demand Rank: ${p.demand_class}/3<br>
+                                Supply Rank: ${p.supply_class}/3<br>
+                                Schools: ${p.school_count}<br>
+                                School-Age Pop: ${p.Estimated_School_Age_Pop_5_17.toLocaleString()}
+                            `;
+                            layer.setStyle({ weight: 3, color: '#333' });
+                        },
+                        mouseout: (e) => {
+                            geojsonLayer.resetStyle(e.target);
+                        }
+                    });
+                }
+            }).addTo(map);
+
+            // Calculate Coverage Gap Index for current selection
+            const gapSum = filteredData.features.reduce((acc, f) => acc + f.properties.gap_index, 0);
+            const avgGap = gapSum / filteredData.features.length;
+            const indicator = document.getElementById('gapStats');
+            
+            if (avgGap > 0.5) {
+                indicator.className = 'gap-indicator deficit';
+                indicator.innerText = 'HIGH DEFICIT ZONE';
+            } else if (avgGap < -0.5) {
+                indicator.className = 'gap-indicator surplus';
+                indicator.innerText = 'INFRASTRUCTURE SURPLUS';
+            } else {
+                indicator.className = 'gap-indicator';
+                indicator.style.background = '#eee';
+                indicator.style.color = '#333';
+                indicator.innerText = 'BALANCED COVERAGE';
+            }
+        }
+
+        fetch('../data/clean/bay_bivariate_data.geojson')
+            .then(res => res.json())
+            .then(data => {
+                fullData = data;
+                updateMap('all');
+            });
+
+        document.getElementById('stateFilter').addEventListener('change', (e) => {
+            updateMap(e.target.value);
+        });
+    </script>
+</body>
+</html>
