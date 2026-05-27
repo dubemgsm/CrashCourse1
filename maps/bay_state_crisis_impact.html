@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAY States - Conflict & School Risk Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <style>
+        #map { height: 100vh; width: 100%; background: #222; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; color: #eee; }
+        
+        .panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            width: 350px;
+            border: 1px solid #444;
+        }
+
+        .slider-container {
+            margin: 20px 0;
+        }
+
+        input[type=range] {
+            width: 100%;
+        }
+
+        .toggle-btn {
+            background: #d32f2f;
+            color: white;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .toggle-btn.active {
+            background: #388e3c;
+        }
+
+        .stats-box {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-family: monospace;
+        }
+
+        .legend {
+            background: rgba(30, 30, 30, 0.9);
+            padding: 10px;
+            border-radius: 4px;
+            line-height: 1.5;
+            font-size: 12px;
+        }
+        
+        .school-icon { color: #3498db; }
+        .conflict-heat { color: #f44336; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h2 style="margin:0; color: #f44336;">Crisis Impact Dashboard</h2>
+        <p style="font-size: 12px; color: #aaa;">Analyzing School Risk in Adamawa, Borno, & Yobe</p>
+        
+        <div class="slider-container">
+            <label id="dateLabel">Timeframe: All Events</label>
+            <input type="range" id="timeSlider" min="2009" max="2024" value="2024" step="1">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888;">
+                <span>2009</span>
+                <span>2024</span>
+            </div>
+        </div>
+
+        <button id="bufferToggle" class="toggle-btn">Enable Buffer Analysis (10km)</button>
+
+        <div class="stats-box">
+            <div id="schoolCount">Schools: Loading...</div>
+            <div id="conflictCount">Conflict Events: Loading...</div>
+            <div id="riskCount" style="color: #ff9800;">Schools at Risk: 0</div>
+        </div>
+
+        <div id="lgaDetails" style="margin-top:15px; font-size: 13px;">
+            Hover over a school to see risk profile.
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <script>
+        const map = L.map('map').setView([11.5, 13.0], 7);
+
+        // Dark base map for high contrast
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; CARTO'
+        }).addTo(map);
+
+        let schoolData = [];
+        let conflictData = [];
+        let heatLayer;
+        let schoolCluster = L.markerClusterGroup();
+        let bufferLayers = L.layerGroup();
+        let bufferActive = false;
+
+        // Load Schools
+        Papa.parse('../data/clean/north_east_schools_complete.csv', {
+            download: true,
+            header: true,
+            complete: (results) => {
+                schoolData = results.data.filter(d => d.latitude && d.longitude);
+                renderSchools();
+                document.getElementById('schoolCount').innerText = `Schools: ${schoolData.length.toLocaleString()}`;
+            }
+        });
+
+        // Load Conflicts
+        Papa.parse('../data/clean/conflict_data_nga_cleaned_fully.csv', {
+            download: true,
+            header: true,
+            complete: (results) => {
+                // Filter only for BAY states
+                const states = ["Borno state", "Adamawa state", "Yobe state"];
+                conflictData = results.data.filter(d => 
+                    d.latitude && d.longitude && states.includes(d.adm_1)
+                );
+                updateConflictMap(2024);
+            }
+        });
+
+        function updateConflictMap(year) {
+            if (heatLayer) map.removeLayer(heatLayer);
+            
+            const filtered = conflictData.filter(d => parseInt(d.year) === year);
+            const heatPoints = filtered.map(d => [parseFloat(d.latitude), parseFloat(d.longitude), 0.5]);
+            
+            heatLayer = L.heatLayer(heatPoints, {
+                radius: 25,
+                blur: 15,
+                maxZoom: 10,
+                gradient: {0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1: 'red'}
+            }).addTo(map);
+
+            document.getElementById('conflictCount').innerText = `Conflict Events (${year}): ${filtered.length}`;
+            document.getElementById('dateLabel').innerText = `Timeframe: Year ${year}`;
+            
+            if (bufferActive) calculateRisk(filtered);
+        }
+
+        function renderSchools() {
+            schoolCluster.clearLayers();
+            schoolData.forEach(s => {
+                const marker = L.circleMarker([parseFloat(s.latitude), parseFloat(s.longitude)], {
+                    radius: 4,
+                    fillColor: "#3498db",
+                    color: "#fff",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+                
+                marker.bindPopup(`<b>${s.school_name}</b><br>State: ${s.state}`);
+                schoolCluster.addLayer(marker);
+            });
+            map.addLayer(schoolCluster);
+        }
+
+        function calculateRisk(currentConflicts) {
+            bufferLayers.clearLayers();
+            let riskCount = 0;
+            
+            // For performance, we only calculate risk for the visible/filtered conflicts
+            // Use a simple distance check
+            const radiusKm = 10;
+            
+            // To prevent browser hang, we cap the number of active buffers shown visually
+            const topConflicts = currentConflicts.slice(0, 100); 
+
+            topConflicts.forEach(c => {
+                const buffer = L.circle([parseFloat(c.latitude), parseFloat(c.longitude)], {
+                    radius: radiusKm * 1000,
+                    color: '#f44336',
+                    fillColor: '#f44336',
+                    fillOpacity: 0.1,
+                    weight: 1
+                });
+                bufferLayers.addLayer(buffer);
+            });
+
+            // Statistical estimation of schools at risk
+            schoolData.forEach(s => {
+                const sLat = parseFloat(s.latitude);
+                const sLng = parseFloat(s.longitude);
+                
+                const atRisk = currentConflicts.some(c => {
+                    const dist = getDistance(sLat, sLng, parseFloat(c.latitude), parseFloat(c.longitude));
+                    return dist <= radiusKm;
+                });
+                
+                if (atRisk) riskCount++;
+            });
+
+            map.addLayer(bufferLayers);
+            document.getElementById('riskCount').innerText = `Schools at Risk: ${riskCount}`;
+        }
+
+        // Haversine formula
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        document.getElementById('timeSlider').addEventListener('input', (e) => {
+            updateConflictMap(parseInt(e.target.value));
+        });
+
+        document.getElementById('bufferToggle').addEventListener('click', function() {
+            bufferActive = !bufferActive;
+            this.classList.toggle('active');
+            if (bufferActive) {
+                this.innerText = "Buffer Analysis: ON";
+                updateConflictMap(parseInt(document.getElementById('timeSlider').value));
+            } else {
+                this.innerText = "Enable Buffer Analysis (10km)";
+                map.removeLayer(bufferLayers);
+                document.getElementById('riskCount').innerText = `Schools at Risk: 0`;
+            }
+        });
+    </script>
+</body>
+</html>
